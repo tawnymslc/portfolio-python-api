@@ -18,7 +18,7 @@ This Python backend powers the ETL Dashboard feature on my portfolio site. It ex
 - `GET /products/raw`  
   Returns the raw product data as received from the external API
 
-- `GET /products/summary`  
+- `GET /products/average-prices`  
   Returns transformed data: average price per category, calculated on the server
 
 ---
