@@ -1,0 +1,20 @@
+# Byte-compiled / cache files
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Virtual environment
+venv/
+.env/
+
+# Editor/IDE files
+.vscode/
+*.swp
+.DS_Store
+
+# Log files
+*.log
+
+# System files
+*.bak
+*.tmp
