@@ -9,7 +9,7 @@ app.add_middleware(
     allow_origins=[
         "http://localhost:3000",   # local
         "https://tawny-mathi.com",   # production
-        "https://www.tawny-mathi.com" # cors
+        "https://www.tawny-mathi.com" 
     ], 
     allow_credentials=True,
     allow_methods=["*"],
@@ -20,7 +20,7 @@ app.add_middleware(
 @app.get("/products/raw")
 def get_raw_products():
     try:
-        response = requests.get("https://dummyjson.com/products?limit=100")
+        response = requests.get("https://dummyjson.com/products?limit=3")
         return response.json()["products"]
     except Exception as e:
         return { "error": str(e) }
@@ -46,7 +46,7 @@ def get_average_prices():
         result = []
         for category, values in grouped.items():
             avg = round(values["total"] / values["count"], 2)
-            result.append({ "category": category, "averagePrice": avg })
+            result.append({ "category": category, "averagePrice": avg, "count": values["count"] })
 
         return result
 
