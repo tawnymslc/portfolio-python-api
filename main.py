@@ -50,7 +50,12 @@ def get_average_prices():
         result = []
         for category, values in grouped.items():
             avg = round(values["total"] / values["count"], 2)
-            result.append({ "category": category, "averagePrice": avg, "count": values["count"] })
+            result.append({ 
+                "category": category, 
+                "averagePrice": avg, 
+                "count": values["count"],
+                "minPrice": values["minPrice"]
+                })
 
         return result
 
