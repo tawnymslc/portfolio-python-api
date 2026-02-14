@@ -37,10 +37,14 @@ def get_average_prices():
         for product in data:
             category = product["category"]
             if category not in grouped:
-                grouped[category] = { "total": 0, "count": 0 }
+                grouped[category] = { "total": 0, "count": 0,  "minPrice": product["price"] }
 
             grouped[category]["total"] += product["price"]
             grouped[category]["count"] += 1
+            grouped[category]["minPrice"] = min(
+                grouped[category]["minPrice"],
+                product["price"]
+            )
 
         # 3. Load into simplified output
         result = []
