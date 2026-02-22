@@ -16,7 +16,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Extracted (raw) data
+# ---------------------
+# PROJECT ETL DASHBOARD - EXTRACT, TRANSFORM, LOAD
+# ---------------------
+
+# ---------------------
+# RAW
+# ---------------------
 @app.get("/products/raw")
 def get_raw_products():
     try:
@@ -28,11 +34,15 @@ def get_raw_products():
 @app.get("/products/average-prices")
 def get_average_prices():
     try:
-        # 1. Extract
+        # ---------------------
+        # EXTRACT
+        # ---------------------
         response = requests.get("https://dummyjson.com/products?limit=100")
         data = response.json()["products"]
 
-        # 2. Transform
+        # ---------------------
+        # TRANSFORM
+        # ---------------------
         grouped = {}
         for product in data:
             category = product["category"]
@@ -46,7 +56,9 @@ def get_average_prices():
                 product["price"]
             )
 
-        # 3. Load into simplified output
+        # ---------------------
+        # LOAD
+        # ---------------------
         result = []
         for category, values in grouped.items():
             avg = round(values["total"] / values["count"], 2)
@@ -61,3 +73,71 @@ def get_average_prices():
 
     except Exception as e:
         return { "error": str(e) }
+
+# ---------------------
+# PROJECT API DATA SYNC - Integrate data from another system to our systems
+# ---------------------
+
+destination_db = []
+imported_ids = set()
+
+# ---------------------
+# SOURCE SYSTEM
+# ---------------------
+def fetch_users():
+    response = requests.get("https://jsonplaceholder.typicode.com/users")
+    response.raise_for_status()
+    return response.json()
+# ---------------------
+# TRANSFORM
+# ---------------------
+def transform_user(user):
+    return {
+        "userId": user["id"],
+        "fullName": user["name"],
+        "email": user["email"],
+        "city": user["address"]["city"],
+        "latitude": user["address"]["geo"]["lat"],
+        "companyName": user["company"]["name"]
+    }
+
+# ---------------------
+# DESTINATION SYSTEM
+# ---------------------
+@app.post("/import-users")
+def import_users(users: list[dict]):
+    added = 0
+
+    for u in users:
+        uid = u.get("userId")
+        if uid is None:
+            continue
+
+        if uid not in imported_ids:
+            imported_ids.add(uid)
+            destination_db.append(u)
+            added += 1
+
+    return {"imported": added, "received": len(users)}
+
+# ---------------------
+# SYNC ACTION
+# ---------------------
+@app.get("/sync-users")
+def sync_users():
+    raw_users = fetch_users()
+    cleaned = [transform_user(u) for u in raw_users]
+
+    # push into destination system by calling our own ingest function
+    # (keeps the "integration" story: import endpoint is the destination contract)
+    result = import_users(cleaned)
+
+    return {
+        "source_count": len(raw_users),
+        "transformed_count": len(cleaned),
+        **result
+    }
+
+@app.get("/users")
+def get_users():
+    return destination_db
