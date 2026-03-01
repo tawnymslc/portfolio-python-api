@@ -84,60 +84,73 @@ imported_ids = set()
 # ---------------------
 # SOURCE SYSTEM
 # ---------------------
-def fetch_users():
-    response = requests.get("https://jsonplaceholder.typicode.com/users")
+SOURCE_URL = "https://jsonplaceholder.typicode.com/users"
+
+def fetch_deals():
+    response = requests.get(SOURCE_URL, timeout=20)
     response.raise_for_status()
     return response.json()
-# ---------------------
-# TRANSFORM
-# ---------------------
-def transform_user(user):
+
+def transform_borrower(borrower: dict) -> dict:
     return {
-        "userId": user["id"],
-        "fullName": user["name"],
-        "email": user["email"],
-        "city": user["address"]["city"],
-        "latitude": user["address"]["geo"]["lat"],
-        "companyName": user["company"]["name"]
+        "dealId": borrower["id"],
+
+        # lifecycle status (owned by your system)
+        "status": "conditionallyApproved",
+
+        # borrower section
+        "borrower": {
+            "fullName": borrower["name"],
+            "username": borrower["username"],
+            "email": borrower["email"],
+            "city": borrower["address"]["city"],
+            "lat": borrower["address"]["geo"]["lat"],
+            "lng": borrower["address"]["geo"]["lng"],
+        },
+
+        # business section
+        "business": {
+            "companyName": borrower["company"]["name"]
+        }
     }
 
 # ---------------------
 # DESTINATION SYSTEM
 # ---------------------
-@app.post("/import-users")
-def import_users(users: list[dict]):
+@app.post("/import-deals")
+def import_deals(deals: list[dict]):
     added = 0
 
-    for u in users:
-        uid = u.get("userId")
-        if uid is None:
+    for d in deals:
+        did = d.get("dealId")
+        if did is None:
             continue
 
-        if uid not in imported_ids:
-            imported_ids.add(uid)
-            destination_db.append(u)
+        if did not in imported_ids:
+            imported_ids.add(did)
+            destination_db.append(d)
             added += 1
 
-    return {"imported": added, "received": len(users)}
+    return {"imported": added, "received": len(deals)}
 
 # ---------------------
 # SYNC ACTION
 # ---------------------
-@app.get("/sync-users")
-def sync_users():
-    raw_users = fetch_users()
-    cleaned = [transform_user(u) for u in raw_users]
+@app.get("/sync-deals")
+def sync_deals():
+    raw = fetch_deals()
+    cleaned = [transform_borrower(b) for b in raw]
 
     # push into destination system by calling our own ingest function
     # (keeps the "integration" story: import endpoint is the destination contract)
-    result = import_users(cleaned)
+    result = import_deals(cleaned)
 
     return {
-        "source_count": len(raw_users),
+        "source_count": len(raw),
         "transformed_count": len(cleaned),
         **result
     }
 
-@app.get("/users")
-def get_users():
+@app.get("/deals")
+def get_deals():
     return destination_db
