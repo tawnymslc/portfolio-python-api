@@ -1,4 +1,4 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 import requests
 
@@ -78,7 +78,7 @@ def get_average_prices():
 # PROJECT API DATA SYNC - Integrate data from another system to our systems
 # ---------------------
 
-destination_db = []
+deals_db = []
 imported_ids = set()
 
 # ---------------------
@@ -91,26 +91,30 @@ def fetch_deals():
     response.raise_for_status()
     return response.json()
 
-def transform_borrower(borrower: dict) -> dict:
+
+# ---------------------
+# TRANSFRORM DEALS DATA TO BE INGESTED
+# ---------------------
+def transform_deal(deal: dict) -> dict:
     return {
-        "dealId": borrower["id"],
+        "dealId": deal["id"],
 
         # lifecycle status (owned by your system)
         "status": "conditionallyApproved",
 
         # borrower section
         "borrower": {
-            "fullName": borrower["name"],
-            "username": borrower["username"],
-            "email": borrower["email"],
-            "city": borrower["address"]["city"],
-            "lat": borrower["address"]["geo"]["lat"],
-            "lng": borrower["address"]["geo"]["lng"],
+            "fullName": deal["name"],
+            "username": deal["username"],
+            "email": deal["email"],
+            "city": deal["address"]["city"],
+            "lat": deal["address"]["geo"]["lat"],
+            "lng": deal["address"]["geo"]["lng"],
         },
 
         # business section
         "business": {
-            "companyName": borrower["company"]["name"]
+            "companyName": deal["company"]["name"]
         }
     }
 
@@ -128,7 +132,7 @@ def import_deals(deals: list[dict]):
 
         if did not in imported_ids:
             imported_ids.add(did)
-            destination_db.append(d)
+            deals_db.append(d)
             added += 1
 
     return {"imported": added, "received": len(deals)}
@@ -139,7 +143,7 @@ def import_deals(deals: list[dict]):
 @app.get("/sync-deals")
 def sync_deals():
     raw = fetch_deals()
-    cleaned = [transform_borrower(b) for b in raw]
+    cleaned = [transform_deal(d) for d in raw]
 
     # push into destination system by calling our own ingest function
     # (keeps the "integration" story: import endpoint is the destination contract)
@@ -153,4 +157,15 @@ def sync_deals():
 
 @app.get("/deals")
 def get_deals():
-    return destination_db
+    return deals_db
+
+@app.get("/deals/{deal_id}")
+def get_deal_by_id(deal_id: int):
+    raw = fetch_deals()
+    match = next((d for d in raw if d["id"] == deal_id), None)
+
+    if not match:
+        raise HTTPException(status_code=404, detail="Deal not found in source")
+
+    # Return the transformed (deal-shaped) object so UI renders cleanly
+    return transform_deal(match)
