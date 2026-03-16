@@ -75,14 +75,19 @@ def get_average_prices():
         return { "error": str(e) }
 
 # ---------------------
-# PROJECT API DATA SYNC - Integrate data from another system to our systems
+# PROJECT: LENDER API INTEGRATION SIMULATOR
+# Simulates how a lender retrieves deal data from a partner API,
+# transforms the response into its internal LOS schema,
+# and imports records into the lender system.
 # ---------------------
 
 deals_db = []
 imported_ids = set()
 
 # ---------------------
-# SOURCE SYSTEM
+# SYS A / PARTNER API SOURCE (LENDIO-LIKE)
+# Simulates the partner system that provides raw deal data
+# to lenders through an API.
 # ---------------------
 SOURCE_URL = "https://jsonplaceholder.typicode.com/users"
 
@@ -91,9 +96,26 @@ def fetch_deals():
     response.raise_for_status()
     return response.json()
 
+# ---------------------
+# SYS A / PARTNER API GET DEAL BY ID
+# Simulates a lender calling the partner API to retrieve
+# a single raw deal response by ID.
+# ---------------------
+@app.get("/deals/{deal_id}")
+def get_deal_by_id(deal_id: int):
+    raw = fetch_deals()
+    match = next((d for d in raw if d["id"] == deal_id), None)
+
+    if not match:
+        raise HTTPException(status_code=404, detail="Deal not found in source")
+
+    return match
+
 
 # ---------------------
-# TRANSFRORM DEALS DATA TO BE INGESTED
+# SYS B / INTEGRATION MAPPING LAYER
+# Transforms raw partner API deal data into the lender's
+# internal LOS schema before import.
 # ---------------------
 def transform_deal(deal: dict) -> dict:
     return {
@@ -119,10 +141,34 @@ def transform_deal(deal: dict) -> dict:
     }
 
 # ---------------------
-# DESTINATION SYSTEM
+# SYS B / LENDER SYNC WORKFLOW
+# Simulates the lender retrieving deals from the partner API,
+# transforming them into the LOS schema,
+# and sending them to the lender import endpoint.
 # ---------------------
-@app.post("/import-deals")
-def import_deals(deals: list[dict]):
+@app.post("/sync-deals")
+def sync_deal():
+    raw = fetch_deals()
+    cleaned = [transform_deal(d) for d in raw]
+
+    # push into destination system by calling our own ingest function
+    # (keeps the "integration" story: import endpoint is the destination contract)
+    result = import_deal(cleaned)
+
+    return {
+        "source_count": len(raw),
+        "transformed_count": len(cleaned),
+        **result
+    }
+
+# ---------------------
+# SYS C / LENDER LOS IMPORT ENDPOINT
+# Receives transformed deals from the integration layer
+# and imports them into the lender's internal system.
+# Prevents duplicate imports by deal ID.
+# ---------------------
+@app.post("/lender/import-deals")
+def import_deal(deals: list[dict]):
     added = 0
 
     for d in deals:
@@ -138,34 +184,10 @@ def import_deals(deals: list[dict]):
     return {"imported": added, "received": len(deals)}
 
 # ---------------------
-# SYNC ACTION
+# SYS C / LENDER LOS STORED DEALS
+# Returns deals that have already been imported
+# into the lender's internal system.
 # ---------------------
-@app.get("/sync-deals")
-def sync_deals():
-    raw = fetch_deals()
-    cleaned = [transform_deal(d) for d in raw]
-
-    # push into destination system by calling our own ingest function
-    # (keeps the "integration" story: import endpoint is the destination contract)
-    result = import_deals(cleaned)
-
-    return {
-        "source_count": len(raw),
-        "transformed_count": len(cleaned),
-        **result
-    }
-
-@app.get("/deals")
+@app.get("/lender-deals")
 def get_deals():
     return deals_db
-
-@app.get("/deals/{deal_id}")
-def get_deal_by_id(deal_id: int):
-    raw = fetch_deals()
-    match = next((d for d in raw if d["id"] == deal_id), None)
-
-    if not match:
-        raise HTTPException(status_code=404, detail="Deal not found in source")
-
-    # Return the transformed (deal-shaped) object so UI renders cleanly
-    return transform_deal(match)
